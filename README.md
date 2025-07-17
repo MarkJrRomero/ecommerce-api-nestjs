@@ -52,3 +52,7 @@ npm run start:prod
 
 - **API Docs**: Disponible en `/api-docs` (Swagger UI)
 - **Endpoint base**: `http://localhost:3000`
+
+## 🔰 Base de datos en supabase
+
+- https://supabase.com/
