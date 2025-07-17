@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ProductModule } from './products/product.module';
 import { Customer } from './customers/customer.entity';
 import { Delivery } from './deliveries/delivery.entity';
+import { TransactionModule } from './transactions/transaction.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { Delivery } from './deliveries/delivery.entity';
       }),
     }),
     ProductModule,
+    TransactionModule,
     TypeOrmModule.forFeature([Customer, Delivery]),
   ],
 })

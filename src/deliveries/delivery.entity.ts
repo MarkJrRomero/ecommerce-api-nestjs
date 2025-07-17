@@ -1,6 +1,14 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  OneToOne,
+  JoinColumn,
+} from 'typeorm';
 import { Customer } from '../customers/customer.entity';
 import { Product } from '../products/product.entity';
+import { Transaction } from '../transactions/transaction.entity';
 
 @Entity()
 export class Delivery {
@@ -20,4 +28,8 @@ export class Delivery {
 
   @ManyToOne(() => Product)
   product: Product;
+
+  @OneToOne(() => Transaction)
+  @JoinColumn()
+  transaction: Transaction;
 }
