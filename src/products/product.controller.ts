@@ -1,7 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { ProductService } from './product.service';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { Product } from './product.entity';
+import { ProductDto } from './dto/product.dto';
 
 @ApiTags('Products')
 @Controller('products')
@@ -15,7 +15,7 @@ export class ProductController {
   @ApiResponse({
     status: 200,
     description: 'Listado completo',
-    type: [Product],
+    type: [ProductDto],
   })
   getAll() {
     return this.productService.findAll();

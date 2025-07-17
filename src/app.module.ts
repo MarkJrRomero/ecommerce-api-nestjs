@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ProductModule } from './products/product.module';
+import { Customer } from './customers/customer.entity';
+import { Delivery } from './deliveries/delivery.entity';
 
 @Module({
   imports: [
@@ -12,13 +14,14 @@ import { ProductModule } from './products/product.module';
         type: 'postgres',
         url: config.get<string>('DATABASE_URL'),
         autoLoadEntities: true,
-        synchronize: config.get<string>('NODE_ENV') === 'development',
+        synchronize: config.get('NODE_ENV', 'development') === 'development',
         ssl: {
           rejectUnauthorized: false, // Requerido por Supabase
         },
       }),
     }),
     ProductModule,
+    TypeOrmModule.forFeature([Customer, Delivery]),
   ],
 })
 export class AppModule {}
