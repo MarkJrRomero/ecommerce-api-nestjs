@@ -26,11 +26,11 @@ export class TransactionService {
      // 1. Validaciones
      const product = await this.productService.findById(dto.delivery.productId);
      if (!product || product.stock <= 0) {
-       throw new NotFoundException('Producto no disponible');
+       throw new NotFoundException('El producto seleccionado no está disponible');
      }
 
      if (dto.amount < 1500) {
-      throw new BadRequestException('El monto mínimo permitido es $1.500 COP');
+      throw new BadRequestException('El monto mínimo permitido es de $1.500 COP');
     }
 
     if (dto.card.card_holder.length < 5) {
@@ -61,6 +61,7 @@ export class TransactionService {
     try {
 
         // 3. Consumir servicio de pago
+
         const tokenWpi = await this.wpiService.tokenizeCard({
           number: dto.card.number,
           cvc: dto.card.cvc,
