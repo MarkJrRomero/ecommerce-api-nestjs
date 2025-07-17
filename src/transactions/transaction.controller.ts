@@ -10,7 +10,7 @@ export class TransactionController {
 
   @Post()
   @ApiOperation({
-    summary: 'Crear transacción, registrar entrega y pagar con Wompi',
+    summary: 'Crear transacción, registrar entrega y pagar con Wpi',
   })
   create(@Body() dto: CreateTransactionDto) {
     return this.service.createTransaction(dto);

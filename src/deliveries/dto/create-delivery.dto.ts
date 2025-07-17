@@ -18,6 +18,9 @@ export class CreateDeliveryDto {
   @ApiProperty()
   city: string;
 
+  @ApiProperty()
+  country: string;
+
   @ApiProperty({ type: CreateCustomerDto })
   customer: CreateCustomerDto;
 
