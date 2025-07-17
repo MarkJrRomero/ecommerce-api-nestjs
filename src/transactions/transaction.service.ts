@@ -78,9 +78,7 @@ export class TransactionService {
           customerEmail: dto.delivery.customer.email,
         });
 
-        console.log(transaction);
-
-
+        const statusTransaction = transaction.data.status;
 
         // 4. Guardar cliente y entrega
         const customer = this.customerRepo.create(dto.delivery.customer);
@@ -89,6 +87,7 @@ export class TransactionService {
         const delivery = this.deliveryRepo.create({
           address: dto.delivery.address,
           city: dto.delivery.city,
+          country: dto.delivery.country,
           product,
           customer,
           transaction: savedTransaction,
@@ -96,10 +95,7 @@ export class TransactionService {
         await this.deliveryRepo.save(delivery);
 
         // 5. Actualizar transacción con respuesta de Wpi
-        savedTransaction.status = transaction.status as
-          | 'PENDING'
-          | 'APPROVED'
-          | 'DECLINED';
+        savedTransaction.status = statusTransaction;
         savedTransaction.transactionId = transaction.id;
         await this.transactionRepo.save(savedTransaction);
 
@@ -116,12 +112,50 @@ export class TransactionService {
   
       console.error('⚠️ Error al crear transacción en Wpi:');
       if (wpiError) {
-        console.error(wpiError);
+        console.error(wpiError.messages);
+      }else{
+        console.error(error.message || error);
       }
-  
-      console.error(error.message || error);
-      throw new BadRequestException('Error inesperado al procesar el pago');
+      throw new BadRequestException(JSON.stringify(wpiError.messages) || 'Error inesperado al procesar el pago');
     }
    
+  }
+
+
+  async processWpiWebhook(payload: any) {
+
+    if (payload == undefined) {
+      return { received: false };
+    }
+
+    console.log(payload);
+
+    const transactionData = payload.data?.transaction;
+  
+    if (!transactionData || !transactionData.reference || !transactionData.id) {
+      return { received: false };
+    }
+  
+    const refId = transactionData.reference.replace('ref_', '');
+  
+    const transaction = await this.transactionRepo.findOne({
+      where: { id: refId },
+      relations: ['delivery', 'delivery.product'],
+    });
+  
+    if (!transaction) {
+      return { received: false };
+    }
+  
+    transaction.status = transactionData.status; // APPROVED, DECLINED, etc.
+    transaction.transactionId = transactionData.id;
+    await this.transactionRepo.save(transaction);
+
+    // Si no fue aprobado, aumentar stock que se habia reducido
+    if (transactionData.status !== 'APPROVED') {
+      await this.productService.increaseStock(transaction.delivery.product.id);
+    }
+  
+    return { received: true };
   }
 }

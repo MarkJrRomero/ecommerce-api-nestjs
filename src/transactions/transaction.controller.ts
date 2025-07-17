@@ -15,4 +15,12 @@ export class TransactionController {
   create(@Body() dto: CreateTransactionDto) {
     return this.service.createTransaction(dto);
   }
+
+  @Post('webhook')
+  @ApiOperation({
+    summary: 'Procesar webhook de Wpi',
+  })
+  processWebhook(@Body() payload: any) {
+    return this.service.processWpiWebhook(payload);
+  }
 }
