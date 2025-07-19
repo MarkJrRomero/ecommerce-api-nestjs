@@ -121,6 +121,19 @@ export class TransactionService {
    
   }
 
+  async checkTransaction(transactionId: string) {
+    const transaction = await this.transactionRepo.findOne({
+      where: { id: transactionId },
+      relations: ['delivery', 'delivery.product'],
+    });
+
+    if (!transaction) {
+      throw new NotFoundException('No se encontró la transacción');
+    }
+
+    return transaction;
+  }
+
 
   async processWpiWebhook(payload: any) {
 
