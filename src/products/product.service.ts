@@ -22,6 +22,10 @@ export class ProductService {
     return this.productRepo.update(id, { stock: () => 'stock - 1' });
   }
 
+  increaseStock(id: number): Promise<UpdateResult> {
+    return this.productRepo.update(id, { stock: () => 'stock + 1' });
+  }
+
   findAvailable(): Promise<Product[]> {
     return this.productRepo.find({
       where: {

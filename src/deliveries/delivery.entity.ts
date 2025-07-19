@@ -21,6 +21,9 @@ export class Delivery {
   @Column()
   city: string;
 
+  @Column()
+  country: string;
+
   @ManyToOne(() => Customer, (customer) => customer.deliveries, {
     cascade: true,
   })

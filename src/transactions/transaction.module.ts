@@ -6,7 +6,7 @@ import { TransactionController } from './transaction.controller';
 import { ProductModule } from '../products/product.module';
 import { Delivery } from '../deliveries/delivery.entity';
 import { Customer } from '../customers/customer.entity';
-import { WompiService } from './wpi.service';
+import { WpiService } from './wpi.service';
 
 @Module({
   imports: [
@@ -14,6 +14,6 @@ import { WompiService } from './wpi.service';
     ProductModule,
   ],
   controllers: [TransactionController],
-  providers: [TransactionService, WompiService],
+  providers: [TransactionService, WpiService],
 })
 export class TransactionModule {}
