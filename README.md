@@ -324,3 +324,7 @@ Base de datos en supabase: https://supabase.com/
 ![Esquema de Base de Datos](screenshots/bd.png)
 
 La imagen muestra la estructura de las tablas y relaciones en la base de datos PostgreSQL.
+
+### Implementacion WEB aqui
+
+https://github.com/MarkJrRomero/ecommerce-web-reactjs
