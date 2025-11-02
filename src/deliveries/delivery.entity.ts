@@ -30,7 +30,7 @@ export class Delivery {
   @ManyToOne(() => Product)
   product: Product;
 
-  @Column()
+  @Column({ type: 'int', default: 1 })
   quantity: number;
 
   @ManyToOne(() => Transaction, (transaction) => transaction.deliveries)

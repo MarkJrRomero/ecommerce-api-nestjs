@@ -49,7 +49,9 @@ export class TransactionService {
       }
     }
 
-    const totalAmount = products.reduce((sum, product, index) => {
+    const validProducts = products.filter((p): p is NonNullable<typeof p> => p !== null);
+
+    const totalAmount = validProducts.reduce((sum, product, index) => {
       return sum + product.price * dto.products[index].quantity;
     }, 0);
 
@@ -91,15 +93,16 @@ export class TransactionService {
       const statusTransaction = transaction.data.status;
 
       const deliveries = await Promise.all(
-        products.map((product, index) => {
+        validProducts.map((product, index) => {
+          const quantity = dto.products[index].quantity || 1;
           const delivery = this.deliveryRepo.create({
             address: dto.delivery.address,
             city: dto.delivery.city,
             country: dto.delivery.country,
-            product,
+            product: product,
             customer,
             transaction: savedTransaction,
-            quantity: dto.products[index].quantity,
+            quantity: quantity,
           });
           return this.deliveryRepo.save(delivery);
         }),
@@ -109,8 +112,8 @@ export class TransactionService {
       savedTransaction.transactionId = transaction.id;
       await this.transactionRepo.save(savedTransaction);
 
-      for (let i = 0; i < products.length; i++) {
-        const product = products[i];
+      for (let i = 0; i < validProducts.length; i++) {
+        const product = validProducts[i];
         const quantity = dto.products[i].quantity;
         for (let j = 0; j < quantity; j++) {
           await this.productService.reduceStock(product.id);
