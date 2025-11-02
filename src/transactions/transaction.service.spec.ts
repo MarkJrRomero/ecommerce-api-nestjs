@@ -44,6 +44,7 @@ describe('TransactionService', () => {
     product: mockProduct,
     customer: mockCustomer,
     transaction: {} as Transaction,
+    quantity: 1,
   };
 
   const mockTransaction: Transaction = {
@@ -51,12 +52,14 @@ describe('TransactionService', () => {
     status: 'PENDING',
     amount: 1500,
     transactionId: 'N/A',
-    delivery: mockDelivery,
+    deliveries: [mockDelivery],
     createdAt: new Date(),
   };
 
   const mockCreateTransactionDto: CreateTransactionDto = {
-    amount: 1500,
+    products: [
+      { productId: 1, quantity: 1 },
+    ],
     card: {
       number: '4111111111111111',
       cvc: '123',
@@ -65,7 +68,6 @@ describe('TransactionService', () => {
       card_holder: 'Juan Pérez',
     },
     delivery: {
-      productId: 1,
       address: 'Calle 123 #45-67',
       city: 'Bogotá',
       country: 'Colombia',
@@ -131,7 +133,6 @@ describe('TransactionService', () => {
 
   describe('createTransaction', () => {
     it('debería crear una transacción exitosamente', async () => {
-      // Arrange
       mockProductService.findById.mockResolvedValue(mockProduct);
       mockDeliveryRepo.create.mockReturnValue(mockDelivery);
       mockDeliveryRepo.save.mockResolvedValue(mockDelivery);
@@ -146,10 +147,8 @@ describe('TransactionService', () => {
       mockCustomerRepo.save.mockResolvedValue(mockCustomer);
       mockProductService.reduceStock.mockResolvedValue({ affected: 1, raw: {}, generatedMaps: [] });
 
-      // Act
       const result = await service.createTransaction(mockCreateTransactionDto);
 
-      // Assert
       expect(mockProductService.findById).toHaveBeenCalledWith(1);
       expect(result).toBeDefined();
       expect(mockDeliveryRepo.create).toHaveBeenCalledWith({
@@ -158,11 +157,13 @@ describe('TransactionService', () => {
         country: 'Colombia',
         product: mockProduct,
         customer: mockCustomer,
+        transaction: expect.any(Object),
+        quantity: 1,
       });
       expect(mockTransactionRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           status: 'PENDING',
-          amount: 1500,
+          amount: 1000,
           transactionId: 'N/A',
         })
       );
@@ -175,12 +176,19 @@ describe('TransactionService', () => {
       });
       expect(mockWpiService.createTransactionWpi).toHaveBeenCalledWith({
         token: 'tok_test_123',
-        amountInCents: 150000,
+        amountInCents: 100000,
         reference: expect.stringMatching(/^ref_\d+$/),
         customerEmail: 'juan@example.com',
       });
       expect(mockProductService.reduceStock).toHaveBeenCalledWith(1);
       expect(result).toBeDefined();
+    });
+
+    it('debería lanzar BadRequestException cuando no hay productos', async () => {
+      const dtoWithoutProducts = { ...mockCreateTransactionDto, products: [] };
+
+      await expect(service.createTransaction(dtoWithoutProducts))
+        .rejects.toThrow(BadRequestException);
     });
 
     it('debería lanzar NotFoundException cuando el producto no existe', async () => {
@@ -191,20 +199,20 @@ describe('TransactionService', () => {
       expect(mockProductService.findById).toHaveBeenCalledWith(1);
     });
 
-    it('debería lanzar NotFoundException cuando el producto no tiene stock', async () => {
+    it('debería lanzar BadRequestException cuando el producto no tiene suficiente stock', async () => {
       const productWithoutStock = { ...mockProduct, stock: 0 };
       mockProductService.findById.mockResolvedValue(productWithoutStock);
 
       await expect(service.createTransaction(mockCreateTransactionDto))
-        .rejects.toThrow(NotFoundException);
+        .rejects.toThrow(BadRequestException);
       expect(mockProductService.findById).toHaveBeenCalledWith(1);
     });
 
-    it('debería lanzar BadRequestException cuando el monto es menor a 1500', async () => {
-      const dtoWithLowAmount = { ...mockCreateTransactionDto, amount: 1000 };
-      mockProductService.findById.mockResolvedValue(mockProduct);
+    it('debería lanzar BadRequestException cuando el monto total es menor a 1500', async () => {
+      const cheapProduct = { ...mockProduct, price: 500 };
+      mockProductService.findById.mockResolvedValue(cheapProduct);
 
-      await expect(service.createTransaction(dtoWithLowAmount))
+      await expect(service.createTransaction(mockCreateTransactionDto))
         .rejects.toThrow(BadRequestException);
     });
 
@@ -220,10 +228,9 @@ describe('TransactionService', () => {
     });
 
     it('debería manejar errores de Wpi y marcar transacción como DECLINED', async () => {
-      // Arrange
       mockProductService.findById.mockResolvedValue(mockProduct);
-      mockDeliveryRepo.create.mockReturnValue(mockDelivery);
-      mockDeliveryRepo.save.mockResolvedValue(mockDelivery);
+      mockCustomerRepo.create.mockReturnValue(mockCustomer);
+      mockCustomerRepo.save.mockResolvedValue(mockCustomer);
       mockTransactionRepo.create.mockReturnValue(mockTransaction);
       mockTransactionRepo.save.mockResolvedValue(mockTransaction);
       mockWpiService.tokenizeCard.mockRejectedValue({
@@ -236,7 +243,6 @@ describe('TransactionService', () => {
         },
       });
 
-      // Act & Assert
       await expect(service.createTransaction(mockCreateTransactionDto))
         .rejects.toThrow(BadRequestException);
 
@@ -247,10 +253,9 @@ describe('TransactionService', () => {
     });
 
     it('debería manejar errores de Wpi sin estructura de error específica', async () => {
-      // Arrange
       mockProductService.findById.mockResolvedValue(mockProduct);
-      mockDeliveryRepo.create.mockReturnValue(mockDelivery);
-      mockDeliveryRepo.save.mockResolvedValue(mockDelivery);
+      mockCustomerRepo.create.mockReturnValue(mockCustomer);
+      mockCustomerRepo.save.mockResolvedValue(mockCustomer);
       mockTransactionRepo.create.mockReturnValue(mockTransaction);
       mockTransactionRepo.save.mockResolvedValue(mockTransaction);
       mockWpiService.tokenizeCard.mockRejectedValue({
@@ -263,7 +268,6 @@ describe('TransactionService', () => {
         },
       });
 
-      // Act & Assert
       await expect(service.createTransaction(mockCreateTransactionDto))
         .rejects.toThrow(BadRequestException);
     });
@@ -273,10 +277,12 @@ describe('TransactionService', () => {
     it('debería retornar una transacción existente', async () => {
       const transactionWithRelations = {
         ...mockTransaction,
-        delivery: {
-          ...mockDelivery,
-          product: mockProduct,
-        },
+        deliveries: [
+          {
+            ...mockDelivery,
+            product: mockProduct,
+          },
+        ],
       };
 
       mockTransactionRepo.findOne.mockResolvedValue(transactionWithRelations);
@@ -285,7 +291,7 @@ describe('TransactionService', () => {
 
       expect(mockTransactionRepo.findOne).toHaveBeenCalledWith({
         where: { id: 'transaction-uuid-123' },
-        relations: ['delivery', 'delivery.product'],
+        relations: ['deliveries', 'deliveries.product'],
       });
       expect(result).toEqual(transactionWithRelations);
     });
@@ -298,7 +304,7 @@ describe('TransactionService', () => {
 
       expect(mockTransactionRepo.findOne).toHaveBeenCalledWith({
         where: { id: 'non-existent-uuid' },
-        relations: ['delivery', 'delivery.product'],
+        relations: ['deliveries', 'deliveries.product'],
       });
     });
   });
@@ -337,10 +343,12 @@ describe('TransactionService', () => {
 
       const transactionWithRelations = {
         ...mockTransaction,
-        delivery: {
-          ...mockDelivery,
-          product: mockProduct,
-        },
+        deliveries: [
+          {
+            ...mockDelivery,
+            product: mockProduct,
+          },
+        ],
       };
 
       mockTransactionRepo.findOne.mockResolvedValue(transactionWithRelations);
@@ -350,7 +358,7 @@ describe('TransactionService', () => {
 
       expect(mockTransactionRepo.findOne).toHaveBeenCalledWith({
         where: { id: 'transaction-uuid-123' },
-        relations: ['delivery', 'delivery.product'],
+        relations: ['deliveries', 'deliveries.product'],
       });
       expect(mockTransactionRepo.save).toHaveBeenCalledWith({
         ...transactionWithRelations,
@@ -373,10 +381,12 @@ describe('TransactionService', () => {
 
       const transactionWithRelations = {
         ...mockTransaction,
-        delivery: {
-          ...mockDelivery,
-          product: mockProduct,
-        },
+        deliveries: [
+          {
+            ...mockDelivery,
+            product: mockProduct,
+          },
+        ],
       };
 
       mockTransactionRepo.findOne.mockResolvedValue(transactionWithRelations);

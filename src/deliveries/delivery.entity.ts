@@ -3,8 +3,6 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
-  OneToOne,
-  JoinColumn,
 } from 'typeorm';
 import { Customer } from '../customers/customer.entity';
 import { Product } from '../products/product.entity';
@@ -32,7 +30,9 @@ export class Delivery {
   @ManyToOne(() => Product)
   product: Product;
 
-  @OneToOne(() => Transaction)
-  @JoinColumn()
+  @Column()
+  quantity: number;
+
+  @ManyToOne(() => Transaction, (transaction) => transaction.deliveries)
   transaction: Transaction;
 }

@@ -3,7 +3,7 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
-  ManyToOne,
+  OneToMany,
 } from 'typeorm';
 
 import { Delivery } from '../deliveries/delivery.entity';
@@ -22,8 +22,8 @@ export class Transaction {
   @Column()
   transactionId: string;
 
-  @ManyToOne(() => Delivery, (delivery) => delivery.transaction)
-  delivery: Delivery;
+  @OneToMany(() => Delivery, (delivery) => delivery.transaction)
+  deliveries: Delivery[];
 
   @CreateDateColumn()
   createdAt: Date;

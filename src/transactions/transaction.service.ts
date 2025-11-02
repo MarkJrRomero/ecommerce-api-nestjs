@@ -22,14 +22,38 @@ export class TransactionService {
   ) {}
 
   async createTransaction(dto: CreateTransactionDto) {
+    if (!dto.products || dto.products.length === 0) {
+      throw new BadRequestException('Debe incluir al menos un producto');
+    }
 
-     // 1. Validaciones
-     const product = await this.productService.findById(dto.delivery.productId);
-     if (!product || product.stock <= 0) {
-       throw new NotFoundException('El producto seleccionado no está disponible');
-     }
+    const products = await Promise.all(
+      dto.products.map((item) => this.productService.findById(item.productId)),
+    );
 
-     if (dto.amount < 1500) {
+    for (let i = 0; i < products.length; i++) {
+      const product = products[i];
+      const item = dto.products[i];
+
+      if (!product) {
+        throw new NotFoundException(`El producto con ID ${item.productId} no existe`);
+      }
+
+      if (product.stock < item.quantity) {
+        throw new BadRequestException(
+          `El producto "${product.name}" no tiene suficiente stock. Disponible: ${product.stock}, Solicitado: ${item.quantity}`,
+        );
+      }
+
+      if (item.quantity <= 0) {
+        throw new BadRequestException(`La cantidad del producto "${product.name}" debe ser mayor a 0`);
+      }
+    }
+
+    const totalAmount = products.reduce((sum, product, index) => {
+      return sum + product.price * dto.products[index].quantity;
+    }, 0);
+
+    if (totalAmount < 1500) {
       throw new BadRequestException('El monto mínimo permitido es de $1.500 COP');
     }
 
@@ -37,94 +61,86 @@ export class TransactionService {
       throw new BadRequestException('El nombre del titular de la tarjeta no puede tener menos de 5 caracteres');
     }
 
-     // 2. Crear el envio y la transacción PENDING
+    const customer = this.customerRepo.create(dto.delivery.customer);
+    await this.customerRepo.save(customer);
 
-     const initialDelivery = this.deliveryRepo.create({
-       address: dto.delivery.address,
-       city: dto.delivery.city,
-       country: dto.delivery.country,
-       product,
-       customer: dto.delivery.customer,
-     });
+    const initialTransaction = this.transactionRepo.create({
+      status: 'PENDING',
+      amount: totalAmount,
+      transactionId: 'N/A',
+    });
 
-     const savedDelivery = await this.deliveryRepo.save(initialDelivery);
-
-     const initialTransaction = this.transactionRepo.create({
-       status: 'PENDING',
-       amount: dto.amount,
-       delivery: savedDelivery,
-       transactionId: 'N/A',
-     });
-     
-     let savedTransaction = await this.transactionRepo.save(initialTransaction);
+    let savedTransaction = await this.transactionRepo.save(initialTransaction);
 
     try {
+      const tokenWpi = await this.wpiService.tokenizeCard({
+        number: dto.card.number,
+        cvc: dto.card.cvc,
+        exp_month: dto.card.exp_month,
+        exp_year: dto.card.exp_year,
+        card_holder: dto.card.card_holder,
+      });
 
-        // 3. Consumir servicio de pago
+      const transaction = await this.wpiService.createTransactionWpi({
+        token: tokenWpi,
+        amountInCents: totalAmount * 100,
+        reference: `ref_${savedTransaction.id}`,
+        customerEmail: dto.delivery.customer.email,
+      });
 
-        const tokenWpi = await this.wpiService.tokenizeCard({
-          number: dto.card.number,
-          cvc: dto.card.cvc,
-          exp_month: dto.card.exp_month,
-          exp_year: dto.card.exp_year,
-          card_holder: dto.card.card_holder,
-        });
+      const statusTransaction = transaction.data.status;
 
+      const deliveries = await Promise.all(
+        products.map((product, index) => {
+          const delivery = this.deliveryRepo.create({
+            address: dto.delivery.address,
+            city: dto.delivery.city,
+            country: dto.delivery.country,
+            product,
+            customer,
+            transaction: savedTransaction,
+            quantity: dto.products[index].quantity,
+          });
+          return this.deliveryRepo.save(delivery);
+        }),
+      );
 
-        const transaction = await this.wpiService.createTransactionWpi({
-          token: tokenWpi,
-          amountInCents: dto.amount * 100,
-          reference: `ref_${savedTransaction.id}`,
-          customerEmail: dto.delivery.customer.email,
-        });
+      savedTransaction.status = statusTransaction;
+      savedTransaction.transactionId = transaction.id;
+      await this.transactionRepo.save(savedTransaction);
 
-        const statusTransaction = transaction.data.status;
+      for (let i = 0; i < products.length; i++) {
+        const product = products[i];
+        const quantity = dto.products[i].quantity;
+        for (let j = 0; j < quantity; j++) {
+          await this.productService.reduceStock(product.id);
+        }
+      }
 
-        // 4. Guardar cliente y entrega
-        const customer = this.customerRepo.create(dto.delivery.customer);
-        await this.customerRepo.save(customer);
-
-        const delivery = this.deliveryRepo.create({
-          address: dto.delivery.address,
-          city: dto.delivery.city,
-          country: dto.delivery.country,
-          product,
-          customer,
-          transaction: savedTransaction,
-        });
-        await this.deliveryRepo.save(delivery);
-
-        // 5. Actualizar transacción con respuesta de Wpi
-        savedTransaction.status = statusTransaction;
-        savedTransaction.transactionId = transaction.id;
-        await this.transactionRepo.save(savedTransaction);
-
-        // 6. Reducir stock
-        await this.productService.reduceStock(product.id);
-
-        return savedTransaction;
-
+      savedTransaction.deliveries = deliveries;
+      return savedTransaction;
     } catch (error) {
       savedTransaction.status = 'DECLINED';
       await this.transactionRepo.save(savedTransaction);
-  
+
       const wpiError = error?.response?.data?.error;
-  
+
       console.error('⚠️ Error al crear transacción en Wpi:');
       if (wpiError) {
         console.error(wpiError.messages);
-      }else{
+      } else {
         console.error(error.message || error);
       }
-      throw new BadRequestException(JSON.stringify(wpiError.messages) || 'Error inesperado al procesar el pago');
+      throw new BadRequestException(
+        JSON.stringify(wpiError.messages) || 'Error inesperado al procesar el pago',
+      );
     }
-   
   }
 
   async checkTransaction(transactionId: string) {
     const transaction = await this.transactionRepo.findOne({
       where: { id: transactionId },
-      relations: ['delivery', 'delivery.product'],
+      relations: ['deliveries', 'deliveries.product'],
     });
 
     if (!transaction) {
@@ -153,20 +169,23 @@ export class TransactionService {
   
     const transaction = await this.transactionRepo.findOne({
       where: { id: refId },
-      relations: ['delivery', 'delivery.product'],
+      relations: ['deliveries', 'deliveries.product'],
     });
-  
+
     if (!transaction) {
       return { received: false };
     }
-  
-    transaction.status = transactionData.status; // APPROVED, DECLINED, etc.
+
+    transaction.status = transactionData.status;
     transaction.transactionId = transactionData.id;
     await this.transactionRepo.save(transaction);
 
-    // Si no fue aprobado, aumentar stock que se habia reducido
     if (transactionData.status !== 'APPROVED') {
-      await this.productService.increaseStock(transaction.delivery.product.id);
+      for (const delivery of transaction.deliveries) {
+        for (let i = 0; i < delivery.quantity; i++) {
+          await this.productService.increaseStock(delivery.product.id);
+        }
+      }
     }
   
     return { received: true };
